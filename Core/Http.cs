@@ -159,6 +159,15 @@ public static class Format
         return percent is > 0 and < 1 ? "<1%" : Math.Round(percent).ToString("0", Invariant) + "%";
     }
 
+    /// <summary>Pace as a multiple of "on pace": 1.0× is in sync, 2.0× is twice as fast.</summary>
+    public static string Pace(double ratio) => ratio switch
+    {
+        <= 0 => "0×",
+        < 0.1 => "<0.1×",
+        >= 10 => "10×+",
+        _ => ratio.ToString("0.0", Invariant) + "×",
+    };
+
     public static string TitleCase(string text) => Invariant.TextInfo.ToTitleCase(text.Replace('_', ' ').ToLowerInvariant());
 
     public static string WindowName(TimeSpan? length) => length switch

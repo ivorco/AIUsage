@@ -67,6 +67,9 @@ public sealed class ClaudeProvider : IUsageProvider
 
             var result = await get($"{ClaudeWeb.Origin}/api/organizations/{uuid}/usage");
             EnsureWebSuccess(result);
+            // Debug hook for when claude.ai changes the shape of this response.
+            if (Environment.GetEnvironmentVariable("AIUSAGE_RAW_DIR") is { Length: > 0 } rawDir)
+                File.WriteAllText(Path.Combine(rawDir, "claude-usage.json"), result.Json!.ToJsonString());
             return (PlanName(organization), result.Json!);
         }, ct);
 

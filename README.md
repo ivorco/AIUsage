@@ -8,11 +8,18 @@ A Windows tray app (.NET 10, WinForms) that shows how fast you are using your AI
 One bar per provider on a transparent background — Claude (orange), Cursor (blue), ChatGPT (white),
 left to right. The same colors are used in the popup.
 
-Each bar shows that provider's **most urgent** meter — normally the one with the least allowance left
-(a 5-hour limit at 95% beats a weekly limit at 16%). The fill is the share used, or the pace when that is
-higher (half full = on pace, full = twice the pace), so a limit being burned far too fast also shows up.
-Gray means no data (not signed in, or an error). Hover for which meter each bar shows; in the popup that
-meter's label is highlighted.
+Each bar shows how in sync you are with a limit's pace — **used % divided by elapsed %** — for whichever
+of that provider's limits is furthest ahead of its pace:
+
+| Used / elapsed | Pace | Bar |
+|---|---|---|
+| 70% / 70% | 1.0× — in sync | half full |
+| 40% / 20% | 2.0× — twice as fast, slow down | full |
+| 20% / 40% | 0.5× — room to spare, use more | a quarter full |
+
+So half full is the target, fuller means slow down, and emptier means you are under-using the plan.
+Gray means no data (not signed in, or an error). Hover for which limit each bar shows; in the popup that
+limit's label is highlighted and its bar text reads e.g. `2.0× pace · 40% of 20%`.
 
 Right after a reset, pace is measured against at least 10% of the period, so a little early usage doesn't
 look like an alarm. On a light taskbar the white ChatGPT bar is drawn dark gray.

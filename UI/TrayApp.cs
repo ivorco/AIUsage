@@ -94,7 +94,8 @@ sealed class TrayApp : ApplicationContext
 
         var lines = service.Latest.Select(s =>
             s.IsLoading ? $"{s.DisplayName}: loading"
-            : s.TrayMeter(now) is { Used: double used } meter ? $"{s.DisplayName}: {meter.Label} {Format.Percent(used)}"
+            : s.TrayMeter(now) is { } meter && meter.PaceRatio(now) is double ratio ? $"{s.DisplayName}: {meter.Label} {Format.Pace(ratio)} pace"
+            : s.TrayMeter(now) is { Used: double used } fallback ? $"{s.DisplayName}: {fallback.Label} {Format.Percent(used)}"
             : s.Error is not null ? $"{s.DisplayName}: error"
             : $"{s.DisplayName}: —");
         var text = string.Join("\n", lines);

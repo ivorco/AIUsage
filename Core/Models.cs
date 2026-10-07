@@ -24,33 +24,23 @@ public sealed record UsageMeter
     }
 
     /// <summary>
-    /// Pace is measured against at least this share of the period, so a little usage right after a
-    /// reset (1% used, 0.5% elapsed) doesn't read as double pace. Heavy early usage still alerts.
+    /// Guard for the first moments of a period, where elapsed is ~0 and the ratio would blow up.
+    /// Kept small so the ratio still matches the two percentages shown next to it.
     /// </summary>
-    const double MinExpectedForPace = 0.1;
+    const double MinExpectedForPace = 0.01;
 
-    /// <summary>Used divided by expected: 1 is exactly on pace, 2 is twice as fast.</summary>
+    /// <summary>
+    /// Used divided by elapsed — how in sync usage is with the period: 1 is exactly on pace,
+    /// 2 is twice as fast (slow down), 0.5 is half as fast (room to spare).
+    /// </summary>
     public double? PaceRatio(DateTimeOffset now) =>
         Used is double used && Expected(now) is double expected ? used / Math.Max(expected, MinExpectedForPace) : null;
 
-    /// <summary>Pace on a 0..1 scale: 0.5 means on pace, 1 means twice the pace or more.</summary>
+    /// <summary>The pace ratio on a 0..1 bar: 0.5 means on pace, 1 means twice the pace or more.</summary>
     public double? PaceFill(DateTimeOffset now) =>
         PaceRatio(now) is double ratio ? Math.Clamp(ratio * 0.5, 0, 1)
         : Used is double used ? Math.Clamp(used, 0, 1)
         : null;
-
-    /// <summary>
-    /// How close this meter is to trouble, 0..1: the share already used, or — for windows of a day or
-    /// more — the pace when that is higher, so a limit burning far too fast ranks high too. Within a
-    /// few hours pace is just noise (12% used 12 minutes after a reset is not an alarm).
-    /// </summary>
-    public double? Urgency(DateTimeOffset now)
-    {
-        if (Used is not double used)
-            return null;
-        bool paceMatters = PeriodEnd - PeriodStart >= TimeSpan.FromDays(1);
-        return Math.Max(Math.Clamp(used, 0, 1), paceMatters ? PaceFill(now) ?? 0 : 0);
-    }
 }
 
 public sealed record ProviderSnapshot(
@@ -68,9 +58,10 @@ public sealed record ProviderSnapshot(
 
     public bool IsLoading => FetchedAt == default;
 
-    /// <summary>The most urgent meter — usually the one with the least allowance left. It alone drives the tray bar.</summary>
+    /// <summary>The limit furthest ahead of its pace. It alone drives the tray bar.</summary>
     public UsageMeter? TrayMeter(DateTimeOffset now) =>
-        Meters.Where(m => m.Used is not null).MaxBy(m => m.Urgency(now));
+        Meters.Where(m => m.PaceRatio(now) is not null).MaxBy(m => m.PaceRatio(now))
+        ?? Meters.Where(m => m.Used is not null).MaxBy(m => m.Used);
 
-    public double? TrayFill(DateTimeOffset now) => TrayMeter(now)?.Urgency(now);
+    public double? TrayFill(DateTimeOffset now) => TrayMeter(now)?.PaceFill(now);
 }

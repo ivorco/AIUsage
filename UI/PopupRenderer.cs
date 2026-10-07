@@ -174,7 +174,8 @@ static class PopupRenderer
         g.Restore(clip);
 
         var text = meter.Used is not double used ? "—"
-            : expected is double ex ? $"{Format.Percent(used)} used / {Format.Percent(ex)} expected"
+            : meter.PaceRatio(now) is double ratio && expected is double ex
+                ? $"{Format.Pace(ratio)} pace · {Format.Percent(used)} of {Format.Percent(ex)}"
             : $"{Format.Percent(used)} used";
         var textRect = RectangleF.Inflate(r, -9, 0);
 
