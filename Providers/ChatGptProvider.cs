@@ -17,6 +17,7 @@ public sealed class ChatGptProvider : IUsageProvider
 
     public string Id => "chatgpt";
     public string DisplayName => "ChatGPT";
+    public Color Accent => Color.FromArgb(0xEC, 0xEC, 0xEC);
 
     public IReadOnlyList<SettingField> Settings { get; } =
     [
@@ -94,11 +95,11 @@ public sealed class ChatGptProvider : IUsageProvider
         result.EnsureSuccess("Codex usage");
 
         var json = result.Json!;
-        AddWindows(meters, json.At("rate_limit"), "Codex", affectsTray: true);
+        AddWindows(meters, json.At("rate_limit"), "Codex");
         if (json.At("additional_rate_limits") is JsonArray additional)
         {
             foreach (var limit in additional)
-                AddWindows(meters, limit.At("rate_limit"), limit.At("limit_name").Str() ?? "Other", affectsTray: false);
+                AddWindows(meters, limit.At("rate_limit"), limit.At("limit_name").Str() ?? "Other");
         }
 
         var parts = new List<string>();
@@ -117,7 +118,7 @@ public sealed class ChatGptProvider : IUsageProvider
         return Http.SendAsync(HttpMethod.Get, "https://chatgpt.com/backend-api/wham/usage", headers, null, ct);
     }
 
-    static void AddWindows(List<UsageMeter> meters, JsonNode? rateLimit, string prefix, bool affectsTray)
+    static void AddWindows(List<UsageMeter> meters, JsonNode? rateLimit, string prefix)
     {
         foreach (var key in new[] { "secondary_window", "primary_window" })
         {
@@ -132,7 +133,6 @@ public sealed class ChatGptProvider : IUsageProvider
                 Used = (window.At("used_percent").Num() ?? 0) / 100,
                 PeriodStart = resetAt - length,
                 PeriodEnd = resetAt,
-                AffectsTray = affectsTray && length >= TimeSpan.FromDays(1),
             });
         }
     }

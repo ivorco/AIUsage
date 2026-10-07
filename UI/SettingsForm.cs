@@ -49,7 +49,7 @@ sealed class SettingsForm : Form
                    "A saved key can be replaced or removed here, but never viewed. " +
                    "Leave fields empty to use the logins of Claude Code, Cursor and Codex on this PC.",
             AutoSize = true,
-            MaximumSize = new Size(600, 0),
+            MaximumSize = new Size(640, 0),
             ForeColor = Theme.Muted,
             Margin = new Padding(0, 0, 0, 6),
         });
@@ -61,7 +61,7 @@ sealed class SettingsForm : Form
                 Text = provider.DisplayName,
                 AutoSize = true,
                 Font = new Font(Theme.UiFontSemibold, 11f),
-                ForeColor = Theme.Orange,
+                ForeColor = provider.Accent,
                 Margin = new Padding(0, 14, 0, 4),
             });
 
@@ -88,13 +88,28 @@ sealed class SettingsForm : Form
                 {
                     Text = field.IsSecret && saved ? "Saved. " + field.Help : field.Help,
                     AutoSize = true,
-                    MaximumSize = new Size(460, 0),
+                    MaximumSize = new Size(500, 0),
                     ForeColor = field.IsSecret && saved ? Theme.PaleOrange : Theme.Faint,
                     Margin = new Padding(0, 2, 0, 8),
                 };
 
                 layout.Controls.Add(new Label { Text = field.Label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 5, 14, 0) }, 0, row);
                 layout.Controls.Add(box, 1, row);
+
+                var actions = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
+                if (field.Acquire is { } acquire)
+                {
+                    var acquireButton = CreateButton(field.AcquireLabel, primary: false);
+                    acquireButton.Click += (_, _) =>
+                    {
+                        if (acquire(this) is not { Length: > 0 } value)
+                            return;
+                        box.Text = value;
+                        status.Text = "Signed in. Click Save to keep it.";
+                        status.ForeColor = Theme.PaleOrange;
+                    };
+                    actions.Controls.Add(acquireButton);
+                }
                 if (field.IsSecret)
                 {
                     var remove = CreateButton("Remove", primary: false);
@@ -112,9 +127,12 @@ sealed class SettingsForm : Form
                         if (box.TextLength > 0)
                             editor.RemoveRequested = false;
                     };
-                    layout.Controls.Add(remove, 2, row);
+                    actions.Controls.Add(remove);
                 }
+                if (actions.Controls.Count > 0)
+                    layout.Controls.Add(actions, 2, row);
                 row++;
+
                 layout.Controls.Add(status, 1, row);
                 layout.SetColumnSpan(status, 2);
                 row++;

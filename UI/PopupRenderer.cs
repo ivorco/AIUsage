@@ -22,6 +22,9 @@ static class PopupRenderer
     const float Width = 540, Pad = 18, HeaderH = 40, SectionGap = 14, TitleH = 26, NoteH = 20;
     const float RowH = 32, RowDetailH = 42, FooterH = 36, LabelW = 132, DateW = 104, ColGap = 12, BarH = 22;
 
+    static readonly Color LegendUsed = Color.FromArgb(0xC8, 0xC4, 0xBC);
+    static readonly Color LegendExpected = Color.FromArgb(0x6E, 0x6A, 0x64);
+
     sealed class Fonts : IDisposable
     {
         public readonly Font Title = new(Theme.UiFontSemibold, 15f, GraphicsUnit.Pixel);
@@ -68,8 +71,8 @@ static class PopupRenderer
         DrawText(g, "AI Usage", fonts.Title, Theme.Text, new RectangleF(Pad, y, 240, HeaderH), StringAlignment.Near);
         var gear = new RectangleF(Width - Pad - 32, y + (HeaderH - 32) / 2, 32, 32);
         var refresh = new RectangleF(gear.X - 36, gear.Y, 32, 32);
-        DrawIconButton(g, "\uE713", gear, fonts.Glyph, hover, dim: false);
-        DrawIconButton(g, "\uE72C", refresh, fonts.Glyph, hover, dim: state.Refreshing);
+        DrawIconButton(g, "", gear, fonts.Glyph, hover, dim: false);
+        DrawIconButton(g, "", refresh, fonts.Glyph, hover, dim: state.Refreshing);
         hits.Gear = ToDevice(gear, scale);
         hits.Refresh = ToDevice(refresh, scale);
         y += HeaderH;
@@ -79,10 +82,19 @@ static class PopupRenderer
             DrawDivider(g, y + SectionGap / 2);
             y += SectionGap;
 
+            var palette = Theme.PaletteFor(snapshot.Accent);
+            var trayMeter = snapshot.TrayMeter(now);
+
+            using (var dot = new SolidBrush(snapshot.Accent))
+                g.FillEllipse(dot, Pad, y + TitleH / 2 - 4, 8, 8);
+            float nameX = Pad + 14;
             var nameWidth = g.MeasureString(snapshot.DisplayName, fonts.Name).Width;
-            DrawText(g, snapshot.DisplayName, fonts.Name, Theme.Text, new RectangleF(Pad, y, nameWidth + 2, TitleH), StringAlignment.Near);
+            DrawText(g, snapshot.DisplayName, fonts.Name, Theme.Text, new RectangleF(nameX, y, nameWidth + 2, TitleH), StringAlignment.Near);
             if (snapshot.PlanText is { } plan)
-                DrawText(g, plan, fonts.Small, Theme.Muted, new RectangleF(Pad + nameWidth + 4, y + 1, Width - Pad * 2 - nameWidth - 4, TitleH), StringAlignment.Near);
+            {
+                float planX = nameX + nameWidth + 4;
+                DrawText(g, plan, fonts.Small, Theme.Muted, new RectangleF(planX, y + 1, Width - Pad - planX, TitleH), StringAlignment.Near);
+            }
             y += TitleH;
 
             if (Note(snapshot) is { } note)
@@ -94,7 +106,7 @@ static class PopupRenderer
             foreach (var meter in snapshot.Meters)
             {
                 float rowHeight = meter.Detail is null ? RowH : RowDetailH;
-                DrawMeter(g, meter, now, new RectangleF(Pad, y, Width - Pad * 2, rowHeight), fonts);
+                DrawMeter(g, meter, now, new RectangleF(Pad, y, Width - Pad * 2, rowHeight), fonts, palette, drivesTray: ReferenceEquals(meter, trayMeter));
                 y += rowHeight;
             }
         }
@@ -102,10 +114,9 @@ static class PopupRenderer
         // Footer: legend and last update
         DrawDivider(g, y + SectionGap / 2);
         y += SectionGap;
-        float x = Pad;
         var line = new RectangleF(0, y, 0, FooterH - Pad / 2);
-        x = DrawLegendItem(g, x, line, Theme.Orange, marker: false, "Used", fonts.Small);
-        DrawLegendItem(g, x + 16, line, Theme.PaleOrange, marker: true, "Where you should be by now", fonts.Small);
+        float x = DrawLegendItem(g, Pad, line, LegendUsed, marker: false, "Used", fonts.Small);
+        DrawLegendItem(g, x + 16, line, LegendExpected, marker: true, "Where you should be by now", fonts.Small);
         var updated = state.Refreshing ? "Refreshing…" : state.LastUpdated is { } t ? $"Updated {t.ToLocalTime():HH:mm}" : "";
         DrawText(g, updated, fonts.Small, Theme.Faint, new RectangleF(Width - Pad - 140, line.Y, 140, line.Height), StringAlignment.Far);
 
@@ -113,47 +124,50 @@ static class PopupRenderer
         return hits;
     }
 
-    static void DrawMeter(Graphics g, UsageMeter meter, DateTimeOffset now, RectangleF row, Fonts fonts)
+    /// <param name="drivesTray">The meter shown in the tray gets a brighter label.</param>
+    static void DrawMeter(Graphics g, UsageMeter meter, DateTimeOffset now, RectangleF row, Fonts fonts, BarPalette palette, bool drivesTray)
     {
+        var labelColor = drivesTray ? Theme.Text : Theme.Muted;
         if (meter.Detail is null)
         {
-            DrawText(g, meter.Label, fonts.Body, Theme.Muted, new RectangleF(row.X, row.Y, LabelW, row.Height), StringAlignment.Near);
+            DrawText(g, meter.Label, fonts.Body, labelColor, new RectangleF(row.X, row.Y, LabelW, row.Height), StringAlignment.Near);
         }
         else
         {
             float mid = row.Y + row.Height / 2;
-            DrawText(g, meter.Label, fonts.Body, Theme.Muted, new RectangleF(row.X, mid - 18, LabelW, 18), StringAlignment.Near);
+            DrawText(g, meter.Label, fonts.Body, labelColor, new RectangleF(row.X, mid - 18, LabelW, 18), StringAlignment.Near);
             DrawText(g, meter.Detail, fonts.Small, Theme.Faint, new RectangleF(row.X, mid, LabelW, 17), StringAlignment.Near);
         }
 
         var bar = new RectangleF(row.X + LabelW + ColGap, row.Y + (row.Height - BarH) / 2, row.Width - LabelW - DateW - ColGap * 2, BarH);
-        DrawBar(g, bar, meter, now, fonts.Bar);
+        DrawBar(g, bar, meter, now, fonts.Bar, palette);
         DrawText(g, Format.ResetText(meter, now), fonts.Small, Theme.Muted, new RectangleF(row.Right - DateW, row.Y, DateW, row.Height), StringAlignment.Far);
     }
 
-    /// <summary>Orange = used; pale orange = elapsed share of the period, with a marker line so it stays visible under the orange.</summary>
-    static void DrawBar(Graphics g, RectangleF r, UsageMeter meter, DateTimeOffset now, Font font)
+    /// <summary>Solid = used; muted = elapsed share of the period, with a marker line so it stays visible under the solid part.</summary>
+    static void DrawBar(Graphics g, RectangleF r, UsageMeter meter, DateTimeOffset now, Font font, BarPalette palette)
     {
         using var path = RoundedRect(r, 5);
         using (var track = new SolidBrush(Theme.Track))
             g.FillPath(track, path);
 
         var expected = meter.Expected(now);
+        float usedRight = r.X + r.Width * (float)Math.Clamp(meter.Used ?? 0, 0, 1);
         var clip = g.Save();
         g.SetClip(path);
         if (expected is double e && e > 0)
         {
-            using var pale = new SolidBrush(Theme.PaleOrange);
+            using var pale = new SolidBrush(palette.Pale);
             g.FillRectangle(pale, r.X, r.Y, r.Width * (float)e, r.Height);
         }
-        if (meter.Used is double u && u > 0)
+        if (usedRight > r.X)
         {
-            using var orange = new SolidBrush(Theme.Orange);
-            g.FillRectangle(orange, r.X, r.Y, r.Width * (float)Math.Min(u, 1), r.Height);
+            using var fill = new SolidBrush(palette.Fill);
+            g.FillRectangle(fill, r.X, r.Y, usedRight - r.X, r.Height);
         }
         if (expected is double m && m is > 0 and < 1)
         {
-            using var pen = new Pen(Theme.PaceMarker, 2f);
+            using var pen = new Pen(palette.Marker, 2f);
             float mx = r.X + r.Width * (float)m;
             g.DrawLine(pen, mx, r.Y, mx, r.Bottom);
         }
@@ -163,8 +177,26 @@ static class PopupRenderer
             : expected is double ex ? $"{Format.Percent(used)} used / {Format.Percent(ex)} expected"
             : $"{Format.Percent(used)} used";
         var textRect = RectangleF.Inflate(r, -9, 0);
-        DrawText(g, text, font, Color.FromArgb(150, 0, 0, 0), new RectangleF(textRect.X + 1, textRect.Y + 1, textRect.Width, textRect.Height), StringAlignment.Near);
-        DrawText(g, text, font, Color.White, textRect, StringAlignment.Near);
+
+        // Light text over the track and the muted part; over the solid part, whatever contrasts with the accent.
+        clip = g.Save();
+        g.SetClip(new RectangleF(usedRight, r.Y, r.Right - usedRight, r.Height));
+        DrawShadowedText(g, text, font, textRect);
+        g.Restore(clip);
+
+        clip = g.Save();
+        g.SetClip(new RectangleF(r.X, r.Y, usedRight - r.X, r.Height));
+        if (palette.DarkText)
+            DrawText(g, text, font, Theme.Background, textRect, StringAlignment.Near);
+        else
+            DrawShadowedText(g, text, font, textRect);
+        g.Restore(clip);
+    }
+
+    static void DrawShadowedText(Graphics g, string text, Font font, RectangleF rect)
+    {
+        DrawText(g, text, font, Color.FromArgb(150, 0, 0, 0), new RectangleF(rect.X + 1, rect.Y + 1, rect.Width, rect.Height), StringAlignment.Near);
+        DrawText(g, text, font, Color.White, rect, StringAlignment.Near);
     }
 
     static float DrawLegendItem(Graphics g, float x, RectangleF line, Color color, bool marker, string text, Font font)
@@ -175,7 +207,7 @@ static class PopupRenderer
             g.FillPath(brush, path);
         if (marker)
         {
-            using var pen = new Pen(Theme.PaceMarker, 2f);
+            using var pen = new Pen(Theme.Text, 2f);
             g.DrawLine(pen, swatch.Right - 1, swatch.Y - 2, swatch.Right - 1, swatch.Bottom + 2);
         }
         var width = g.MeasureString(text, font).Width;

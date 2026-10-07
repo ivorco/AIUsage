@@ -14,6 +14,14 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
   </ItemGroup>
+
+  <!-- WebView2 always references its WPF assembly, which conflicts with WinForms' WindowsBase; this app doesn't use it. -->
+  <Target Name="RemoveWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
 
 </Project>

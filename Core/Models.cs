@@ -14,9 +14,6 @@ public sealed record UsageMeter
     /// <summary>Optional amount text such as "$3.20 of $10.00".</summary>
     public string? Detail { get; init; }
 
-    /// <summary>Whether this meter drives the provider's tray bar. Short windows (5-hour) don't.</summary>
-    public bool AffectsTray { get; init; } = true;
-
     /// <summary>Fraction of the period that has elapsed — where usage "should" be by now.</summary>
     public double? Expected(DateTimeOffset now)
     {
@@ -36,11 +33,24 @@ public sealed record UsageMeter
     public double? PaceRatio(DateTimeOffset now) =>
         Used is double used && Expected(now) is double expected ? used / Math.Max(expected, MinExpectedForPace) : null;
 
-    /// <summary>Tray bar fill: 0.5 means on pace, 1 means twice the pace or more.</summary>
+    /// <summary>Pace on a 0..1 scale: 0.5 means on pace, 1 means twice the pace or more.</summary>
     public double? PaceFill(DateTimeOffset now) =>
         PaceRatio(now) is double ratio ? Math.Clamp(ratio * 0.5, 0, 1)
         : Used is double used ? Math.Clamp(used, 0, 1)
         : null;
+
+    /// <summary>
+    /// How close this meter is to trouble, 0..1: the share already used, or — for windows of a day or
+    /// more — the pace when that is higher, so a limit burning far too fast ranks high too. Within a
+    /// few hours pace is just noise (12% used 12 minutes after a reset is not an alarm).
+    /// </summary>
+    public double? Urgency(DateTimeOffset now)
+    {
+        if (Used is not double used)
+            return null;
+        bool paceMatters = PeriodEnd - PeriodStart >= TimeSpan.FromDays(1);
+        return Math.Max(Math.Clamp(used, 0, 1), paceMatters ? PaceFill(now) ?? 0 : 0);
+    }
 }
 
 public sealed record ProviderSnapshot(
@@ -51,24 +61,16 @@ public sealed record ProviderSnapshot(
     string? Error,
     DateTimeOffset FetchedAt)
 {
+    public Color Accent { get; init; } = Color.Gray;
+
     public static ProviderSnapshot Loading(IUsageProvider provider) =>
-        new(provider.Id, provider.DisplayName, null, [], null, default);
+        new(provider.Id, provider.DisplayName, null, [], null, default) { Accent = provider.Accent };
 
     public bool IsLoading => FetchedAt == default;
 
-    /// <summary>The most alarming pace among the meters that drive the tray.</summary>
-    public double? TrayFill(DateTimeOffset now) => Max(m => m.PaceFill(now));
+    /// <summary>The most urgent meter — usually the one with the least allowance left. It alone drives the tray bar.</summary>
+    public UsageMeter? TrayMeter(DateTimeOffset now) =>
+        Meters.Where(m => m.Used is not null).MaxBy(m => m.Urgency(now));
 
-    public double? PaceRatio(DateTimeOffset now) => Max(m => m.PaceRatio(now));
-
-    double? Max(Func<UsageMeter, double?> selector)
-    {
-        double? max = null;
-        foreach (var meter in Meters)
-        {
-            if (meter.AffectsTray && selector(meter) is double value)
-                max = max is null ? value : Math.Max(max.Value, value);
-        }
-        return max;
-    }
+    public double? TrayFill(DateTimeOffset now) => TrayMeter(now)?.Urgency(now);
 }

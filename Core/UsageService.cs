@@ -34,7 +34,7 @@ public sealed class UsageService
     {
         try
         {
-            return await provider.FetchAsync(ct);
+            return (await provider.FetchAsync(ct)) with { Accent = provider.Accent };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -48,7 +48,7 @@ public sealed class UsageService
                 HttpRequestException or TaskCanceledException => "Network error: " + e.Message,
                 _ => $"{e.GetType().Name}: {e.Message}",
             };
-            return new ProviderSnapshot(provider.Id, provider.DisplayName, null, [], message, DateTimeOffset.Now);
+            return new ProviderSnapshot(provider.Id, provider.DisplayName, null, [], message, DateTimeOffset.Now) { Accent = provider.Accent };
         }
     }
 }

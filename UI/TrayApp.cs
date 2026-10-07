@@ -85,7 +85,8 @@ sealed class TrayApp : ApplicationContext
     void UpdateIcon()
     {
         var now = DateTimeOffset.Now;
-        using var bitmap = TrayIconRenderer.Render(service.Latest.Select(s => s.TrayFill(now)).ToList(), SystemInformation.SmallIconSize.Width);
+        var bars = TrayIconRenderer.Bars(service.Latest, now, Theme.TaskbarIsLight());
+        using var bitmap = TrayIconRenderer.Render(bars, SystemInformation.SmallIconSize.Width);
         var icon = TrayIconRenderer.ToIcon(bitmap);
         tray.Icon = icon;
         currentIcon?.Dispose();
@@ -93,8 +94,8 @@ sealed class TrayApp : ApplicationContext
 
         var lines = service.Latest.Select(s =>
             s.IsLoading ? $"{s.DisplayName}: loading"
-            : s.Meters.Count == 0 && s.Error is not null ? $"{s.DisplayName}: error"
-            : s.PaceRatio(now) is double ratio ? $"{s.DisplayName}: {ratio:0.0}× pace"
+            : s.TrayMeter(now) is { Used: double used } meter ? $"{s.DisplayName}: {meter.Label} {Format.Percent(used)}"
+            : s.Error is not null ? $"{s.DisplayName}: error"
             : $"{s.DisplayName}: —");
         var text = string.Join("\n", lines);
         tray.Text = text.Length > 127 ? text[..127] : text;

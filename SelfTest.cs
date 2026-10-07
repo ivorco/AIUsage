@@ -47,6 +47,25 @@ static class SelfTest
         Check("light usage right after a reset is not an alarm", Near(Meter(0.01).PaceFill(start.AddHours(3)), 0.05));
         Check("heavy usage right after a reset still alerts", Near(Meter(0.3).PaceFill(start.AddDays(1)), 1.0));
 
+        UsageMeter Window(string label, double used, TimeSpan length, double elapsed) =>
+            new() { Label = label, Used = used, PeriodStart = mid - length * elapsed, PeriodEnd = mid + length * (1 - elapsed) };
+        var nearlyOut = new ProviderSnapshot("test", "Test", null,
+        [
+            Window("weekly", 0.16, TimeSpan.FromDays(7), 0.5),
+            Window("5-hour", 0.95, TimeSpan.FromHours(5), 0.9),
+        ], null, mid);
+        Check("tray shows the limit with the least left", nearlyOut.TrayMeter(mid)?.Label == "5-hour" && Near(nearlyOut.TrayFill(mid), 0.95));
+        var burning = nearlyOut with
+        {
+            Meters = [Window("weekly", 0.5, TimeSpan.FromDays(7), 0.1), Window("5-hour", 0.6, TimeSpan.FromHours(5), 0.9)],
+        };
+        Check("a limit burned far too fast outranks a slightly fuller one", burning.TrayMeter(mid)?.Label == "weekly" && Near(burning.TrayFill(mid), 1.0));
+        var justReset = nearlyOut with
+        {
+            Meters = [Window("weekly", 0.2, TimeSpan.FromDays(7), 0.88), Window("5-hour", 0.12, TimeSpan.FromHours(5), 0.04)],
+        };
+        Check("pace inside a fresh 5-hour window is ignored", justReset.TrayMeter(mid)?.Label == "weekly" && Near(justReset.TrayFill(mid), 0.2));
+
         log.Add($"{failures} failure(s)");
         File.WriteAllLines(outputPath, log);
         return failures == 0 ? 0 : 1;

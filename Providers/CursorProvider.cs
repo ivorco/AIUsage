@@ -16,6 +16,7 @@ public sealed class CursorProvider : IUsageProvider
 
     public string Id => "cursor";
     public string DisplayName => "Cursor";
+    public Color Accent => Color.FromArgb(0x4A, 0x8B, 0xF5);
 
     public IReadOnlyList<SettingField> Settings { get; } =
     [

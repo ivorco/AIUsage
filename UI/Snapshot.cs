@@ -23,15 +23,14 @@ static class Snapshot
             s.ProviderId,
             s.PlanText,
             s.Error,
+            TrayMeter = s.TrayMeter(now)?.Label,
             TrayFill = s.TrayFill(now),
-            PaceRatio = s.PaceRatio(now),
             Meters = s.Meters.Select(m => new
             {
                 m.Label,
                 m.Used,
                 Expected = m.Expected(now),
-                PaceFill = m.PaceFill(now),
-                m.AffectsTray,
+                Urgency = m.Urgency(now),
                 m.Detail,
                 m.PeriodStart,
                 m.PeriodEnd,
@@ -40,13 +39,12 @@ static class Snapshot
         });
         File.WriteAllText(Path.Combine(directory, "snapshot.json"), JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
 
-        var fills = service.Latest.Select(s => s.TrayFill(now)).ToList();
         foreach (var size in new[] { 16, 20, 24, 32 })
         {
-            using var icon = TrayIconRenderer.Render(fills, size);
+            using var icon = TrayIconRenderer.Render(TrayIconRenderer.Bars(service.Latest, now, Theme.TaskbarIsLight()), size);
             icon.Save(Path.Combine(directory, $"tray-{size}.png"), ImageFormat.Png);
         }
-        RenderTrayPreview(fills, Path.Combine(directory, "tray-preview.png"));
+        RenderTrayPreview(service.Latest, now, Path.Combine(directory, "tray-preview.png"));
 
         foreach (var scale in new[] { 1f, 1.5f })
         {
@@ -72,11 +70,12 @@ static class Snapshot
         return 0;
     }
 
-    /// <summary>The 24px icon magnified 8× on a dark and a light taskbar color.</summary>
-    static void RenderTrayPreview(IReadOnlyList<double?> fills, string path)
+    /// <summary>The 24px icon magnified 8× on a dark and a light taskbar, each with the colors used there.</summary>
+    static void RenderTrayPreview(IReadOnlyList<ProviderSnapshot> snapshots, DateTimeOffset now, string path)
     {
         const int magnified = 24 * 8, margin = 20;
-        using var icon = TrayIconRenderer.Render(fills, 24);
+        using var darkIcon = TrayIconRenderer.Render(TrayIconRenderer.Bars(snapshots, now, lightTaskbar: false), 24);
+        using var lightIcon = TrayIconRenderer.Render(TrayIconRenderer.Bars(snapshots, now, lightTaskbar: true), 24);
         using var preview = new Bitmap((magnified + margin * 2) * 2, magnified + margin * 2);
         using var g = Graphics.FromImage(preview);
         g.InterpolationMode = InterpolationMode.NearestNeighbor;
@@ -86,8 +85,8 @@ static class Snapshot
             g.FillRectangle(dark, 0, 0, half, preview.Height);
         using (var light = new SolidBrush(Color.FromArgb(0xEE, 0xEE, 0xEE)))
             g.FillRectangle(light, half, 0, half, preview.Height);
-        g.DrawImage(icon, new Rectangle(margin, margin, magnified, magnified));
-        g.DrawImage(icon, new Rectangle(half + margin, margin, magnified, magnified));
+        g.DrawImage(darkIcon, new Rectangle(margin, margin, magnified, magnified));
+        g.DrawImage(lightIcon, new Rectangle(half + margin, margin, magnified, magnified));
         preview.Save(path, ImageFormat.Png);
     }
 }

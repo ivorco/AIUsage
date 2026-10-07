@@ -1,7 +1,12 @@
 using System.Drawing.Text;
 using System.Runtime.InteropServices;
+using Microsoft.Win32;
 
 namespace AIUsage.UI;
+
+/// <summary>Colors for one provider's bars, derived from its accent color.</summary>
+/// <param name="DarkText">Whether text drawn over <see cref="Fill"/> must be dark to stay readable.</param>
+readonly record struct BarPalette(Color Fill, Color Pale, Color Marker, bool DarkText);
 
 static class Theme
 {
@@ -21,6 +26,35 @@ static class Theme
     public const string UiFontSemibold = "Segoe UI Semibold";
 
     public static string GlyphFont { get; } = HasFont("Segoe Fluent Icons") ? "Segoe Fluent Icons" : "Segoe MDL2 Assets";
+
+    public static bool IsLight(Color c) => (0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B) / 255 > 0.6;
+
+    /// <summary>Solid accent for "used", a muted version for "expected", and a marker/text color that contrasts with the accent.</summary>
+    public static BarPalette PaletteFor(Color accent) => IsLight(accent)
+        ? new BarPalette(accent, Blend(accent, Color.FromArgb(0x50, 0x50, 0x50), 0.45), Background, DarkText: true)
+        : new BarPalette(accent, Blend(accent, Color.FromArgb(0xAA, 0xAA, 0xAA), 0.4), Blend(accent, Color.White, 0.75), DarkText: false);
+
+    /// <summary>Tray bars need contrast with the taskbar: a white accent turns dark on a light taskbar.</summary>
+    public static Color TrayColor(Color accent, bool lightTaskbar) =>
+        lightTaskbar && IsLight(accent) ? Color.FromArgb(0x30, 0x30, 0x30) : accent;
+
+    public static bool TaskbarIsLight()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            return key?.GetValue("SystemUsesLightTheme") is int value && value != 0;
+        }
+        catch (Exception e) when (e is System.Security.SecurityException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    static Color Blend(Color a, Color b, double t) => Color.FromArgb(
+        (int)Math.Round(a.R + (b.R - a.R) * t),
+        (int)Math.Round(a.G + (b.G - a.G) * t),
+        (int)Math.Round(a.B + (b.B - a.B) * t));
 
     static bool HasFont(string name)
     {
